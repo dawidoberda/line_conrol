@@ -3,13 +3,29 @@ import time
 import RPi.GPIO as gpio
 import csv
 import os
+from PyQt5 import QtWidgets
+from PyQt5.QtCore import QTimer, QRect
+from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, qApp, QMessageBox
+import sys
+import threading
+from configparser import ConfigParser
+from configuration_window import MyWindow1
 
-opt_sensor_pin = 17
-reed1_pin = 27
-reed2_pin = 22
-reed3_pin = 18
+config = ConfigParser()
 
-accepted_low_time = 20 #ile czasu moze byc stan niski zeby nie liczyc postoju
+try:
+    config.read('config.ini')
+except Exception as err:
+    print('Cannot open the file')
+    print(str(err))
+
+
+opt_sensor_pin = int(config.get('pins', 'opt_sensor'))
+reed1_pin = int(config.get('pins', 'reed1'))
+reed2_pin = int(config.get('pins', 'reed2'))
+reed3_pin = int(config.get('pins', 'reed3'))
+
+accepted_low_time = int(config.get('delay', 'accepted_low_time')) #ile czasu moze byc stan niski zeby nie liczyc postoju
 
 #zmienne do czujnika optycznego
 start_optical = None
@@ -81,9 +97,109 @@ high_start_reed1 = None
 delay_reed1 = None
 previous_state_reed1 = 0
 
+def delay_func():
+    input_reed3 = gpio.input(reed3_pin)
+    global high_start_reed3
+    global previous_state_reed3
+    if input_reed3 == 1 and previous_state_reed3 == 0:
+        high_start_reed3 = datetime.now()
+        previous_state_reed3 = not previous_state_reed3
+        print("reed3 delay start counting")
+
+
+    input_reed2 = gpio.input(reed2_pin)
+    global high_start_reed2
+    global previous_state_reed2
+    if input_reed2 == 1 and previous_state_reed2 == 0:
+        high_start_reed2 = datetime.now()
+        previous_state_reed2 = not previous_state_reed2
+        print("reed2 delay start counting")
+
+
+    input_reed1 = gpio.input(reed1_pin)
+    print(input_reed1)
+    global high_start_reed1
+    global previous_state_reed1
+    if input_reed1 == 1 and previous_state_reed1 == 0:
+        high_start_reed1 = datetime.now()
+        previous_state_reed1 = not previous_state_reed1
+        print("reed1 delay start counting")
+
+
+class MyWindow(QMainWindow):
+    def __init__(self):
+        super(MyWindow, self).__init__()
+        self.setGeometry(200, 200, 800, 600)
+        self.setWindowTitle("Pomiar Cyklu")
+        self.initUI()
+
+    def openWindow(self):
+        self.conf_window = MyWindow1()
+        self.conf_window.show()
+
+    def initUI(self):
+        exitAct = QAction('Exit', self)
+        exitAct.setStatusTip("Exit Application")
+        exitAct.triggered.connect(qApp.quit)
+
+        exportPlot = QAction('Export Plot', self)
+        exportPlot.setStatusTip('Export different plots')
+
+        configure = QAction('Configure', self)
+        configure.setStatusTip('Open configuration window')
+        configure.triggered.connect(self.openWindow)
+
+        about = QAction('About', self)
+        about.setStatusTip('Show information about application')
+        about.triggered.connect(self.show_help_popup)
+
+        self.statusBar()
+
+        menubar = self.menuBar()
+
+        fileMenu = menubar.addMenu('File')
+        fileMenu.addAction(exportPlot)
+        fileMenu.addAction(exitAct)
+
+        settingsMenu = menubar.addMenu('Settings')
+        settingsMenu.addAction(configure)
+
+        helpMenu = menubar.addMenu('Help')
+        helpMenu.addAction(about)
+
+
+
+
+    def update(self):
+        #self.label.adjustSize() #dostosowanie rozmiaru okna
+        pass
+
+    def show_help_popup(self):
+        msg = QMessageBox()
+        msg.setWindowTitle("About Application")
+        msg.setText("version 1.0\n author: Dawid Oberda\n mail: dawid_oberda@jabil.com")
+        msg.setIcon(QMessageBox.Information)
+        msg.setStandardButtons(QMessageBox.Ok)
+
+        x = msg.exec_()
+
+def window():
+    app = QApplication([])
+    win = MyWindow()
+
+    timer = QTimer()
+    timer.timeout.connect(delay_func)
+    timer.start(1000)
+
+    win.show()
+    sys.exit(app.exec_())
+
+
+
+
 def op_sensor_rising_detect(opt_sensor_pin):
     print("Opt Sensor rising edge detected!")
-    global first_time 
+    global first_time
     if first_time == True: #to zadziala tylko przy pierwszym wejsciu
         print("first time!")
         global start_optical
@@ -112,7 +228,7 @@ def op_sensor_rising_detect(opt_sensor_pin):
                 avr30_optical = sum30 / 30
                 cycle30_optical = []
                 cycle30_optical.append(optical_cycle_time)
-            
+
             #licznie sredniej dla calej zmiany
             actual_hour = stop_optical.hour
             if actual_hour >= 6 and actual_hour <= 14:
@@ -127,15 +243,15 @@ def op_sensor_rising_detect(opt_sensor_pin):
                 avr_2shift_optical = 0
                 cycle_3shift_optical = []
                 avr_3shift_optical = 0
-                
+
                 cycle_1shift_optical.append(optical_cycle_time)
                 sum1 = 0
-                
+
                 for cycle1 in cycle_1shift_optical:
                     sum1 = sum1 + cycle1.seconds
-                    
+
                 avr_1shift_optical = sum1 / len(cycle_1shift_optical)
-                
+
             elif actual_hour >14 and actual_hour <=22:
                 #global cycle_1shift_optical
                 #global avr_1shift_optical
@@ -148,15 +264,15 @@ def op_sensor_rising_detect(opt_sensor_pin):
                 avr_1shift_optical = 0
                 cycle_3shift_optical = []
                 avr_3shift_optical = 0
-                
+
                 cycle_2shift_optical.append(optical_cycle_time)
                 sum2 = 0
-                
+
                 for cycle2 in cycle_2shift_optical:
                     sum2 = sum2 + cycle2.seconds
-                    
+
                 avr_2shift_optical = sum2 / len(cycle_2shift_optical)
-                
+
             elif actual_hour >22 and actual_hour <6:
                 #global cycle_1shift_optical
                 #global avr_1shift_optical
@@ -164,35 +280,36 @@ def op_sensor_rising_detect(opt_sensor_pin):
                 #global avr_2shift_optical
                 #global cycle_3shift_optical
                 #global avr_3shift_optical
-                
+
                 #zerowanie elementow z poprzednich zmian
                 cycle_1shift_optical = []
                 avr_1shift_optical = 0
                 cycle_2shift_optical = []
                 avr_2shift_optical = 0
-                
+
                 cycle_3shift_optical.append(optical_cycle_time)
                 sum3 = 0
-                
+
                 for cycle3 in cycle_3shift_optical:
                     sum3 = sum3 + cycle3.seconds
-                    
+
                 avr_3shift_optical = sum3 / len(cycle_3shift_optical)
-            
+
             #zapis do pliku csv
+            optical_csv_file = str(config.get('files', 'optical_file'))
             try:
-                with open('/media/CYKL/optical.csv', 'a') as csvfile:
+                with open(optical_csv_file, 'a') as csvfile:
                     optical_csv = csv.writer(csvfile, delimiter=';')
-                    optical_csv.writerow([stop_optical, optical_cycle_time, avr30_optical, avr_1shift_optical, avr_2shift_optical, avr_1shift_optical])    
+                    optical_csv.writerow([stop_optical, optical_cycle_time, avr30_optical, avr_1shift_optical, avr_2shift_optical, avr_1shift_optical])
             except Exception as err:
                 print("Cannot open the file")
                 print(str(err))
-               
+
             start_optical = stop_optical
         else:
             print("Not count! To short time")
-    
-    
+
+
 
 def reed1_falling_detect(reed1_pin):
     print("reed1 sensor falling edge detected!")
@@ -206,7 +323,7 @@ def reed1_falling_detect(reed1_pin):
     else: #dla kazdego kolejnego zbocza
         global stop_reed1
         stop_reed1 = datetime.now()
-        
+
         #liczenie czasu postoju
         global previous_state_reed1
         previous_state_reed1 = not previous_state_reed1
@@ -215,20 +332,21 @@ def reed1_falling_detect(reed1_pin):
             delay_reed1 = delay_reed1_tmp
             print("reed1 delay is {}".format(delay_reed1))
             actual_date = date.today()
+            delay_csv_file = str(config.get('files', 'delay_file'))
             try:
-                with open('/home/pi/Public/delay.csv', 'a') as csvfile:
+                with open(delay_csv_file, 'a') as csvfile:
                     delay_csv = csv.writer(csvfile, delimiter=';')
                     delay_csv.writerow([actual_date, delay_reed1, 0, 0])
             except Exception as err:
                 print("Cannot open the file")
                 print(str(err))
-        
+
         print("stop reed1 : {}".format(stop_reed1))
         #global start_reed1
         print("start reed1 : {}".format(start_reed1))
         global reed1_cycle_time
         reed1_tmp = stop_reed1 - start_reed1
-        
+
         reed1_cycle_time = reed1_tmp
             #liczenie sredniej dla 30 pomiarow
         global cycle30_reed1
@@ -242,7 +360,7 @@ def reed1_falling_detect(reed1_pin):
             avr30_reed1 = sum30 / 30
             cycle30_reed1 = []
             cycle30_reed1.append(reed1_cycle_time)
-            
+
         #licznie sredniej dla calej zmiany
         actual_hour = stop_reed1.hour
         if actual_hour >= 6 and actual_hour <= 14:
@@ -257,15 +375,15 @@ def reed1_falling_detect(reed1_pin):
             avr_2shift_reed1 = 0
             cycle_3shift_reed1 = []
             avr_3shift_reed1 = 0
-                
+
             cycle_1shift_reed1.append(reed1_cycle_time)
             sum1 = 0
-                
+
             for cycle1 in cycle_1shift_reed1:
                 sum1 = sum1 + cycle1.seconds
-                    
+
             avr_1shift_reed1 = sum1 / len(cycle_1shift_reed1)
-                
+
         elif actual_hour >14 and actual_hour <=22:
             #global cycle_1shift_reed1
             #global avr_1shift_reed1
@@ -278,15 +396,15 @@ def reed1_falling_detect(reed1_pin):
             avr_1shift_reed1= 0
             cycle_3shift_reed1 = []
             avr_3shift_reed1 = 0
-                
+
             cycle_2shift_reed1.append(reed1_cycle_time)
             sum2 = 0
-                
+
             for cycle2 in cycle_2shift_reed1:
                 sum2 = sum2 + cycle2.seconds
-                    
+
             avr_2shift_reed1 = sum2 / len(cycle_2shift_reed1)
-                
+
         elif actual_hour >22 and actual_hour <6:
             #global cycle_1shift_reed1
             #global avr_1shift_reed1
@@ -294,32 +412,33 @@ def reed1_falling_detect(reed1_pin):
             #global avr_2shift_reed1
             #global cycle_3shift_reed1
             #global avr_3shift_reed1
-                
+
             #zerowanie elementow z poprzednich zmian
             cycle_1shift_reed1 = []
             avr_1shift_reed1 = 0
             cycle_2shift_reed1 = []
             avr_2shift_reed1 = 0
-                
+
             cycle_3shift_reed1.append(reed1_cycle_time)
             sum3 = 0
-                
+
             for cycle3 in cycle_3shift_reed1:
                 sum3 = sum3 + cycle3.seconds
-                    
+
             avr_3shift_reed1 = sum3 / len(cycle_3shift_reed1)
-            
+
         #zapis do pliku csv
+        reed1_csv_file = str(config.get('files', 'reed1_file'))
         try:
-            with open('/home/pi/Public/reed1.csv', 'a') as csvfile:
+            with open(reed1_csv_file, 'a') as csvfile:
                 reed1_csv = csv.writer(csvfile, delimiter=';')
-                reed1_csv.writerow([stop_reed1, reed1_cycle_time, avr30_reed1, avr_1shift_reed1, avr_2shift_reed1, avr_1shift_reed1])    
+                reed1_csv.writerow([stop_reed1, reed1_cycle_time, avr30_reed1, avr_1shift_reed1, avr_2shift_reed1, avr_1shift_reed1])
         except Exception as err:
              print("Cannot open the file")
              print(str(err))
-               
+
         start_reed1 = stop_reed1
-    
+
 
 def reed2_falling_detect(reed2_pin):
     print("reed2 sensor falling edge detected!")
@@ -333,7 +452,7 @@ def reed2_falling_detect(reed2_pin):
     else: #dla kazdego kolejnego zbocza
         global stop_reed2
         stop_reed2 = datetime.now()
-        
+
          #liczenie czasu postoju
         global previous_state_reed2
         previous_state_reed2 = not previous_state_reed2
@@ -342,20 +461,21 @@ def reed2_falling_detect(reed2_pin):
             delay_reed2 = delay_reed2_tmp
             print("reed2 delay is {}".format(delay_reed2))
             actual_date = date.today()
+            delay_csv_file = str(config.get('files', 'delay_file'))
             try:
-                with open('/home/pi/Public/delay.csv', 'a') as csvfile:
+                with open(delay_csv_file, 'a') as csvfile:
                     delay_csv = csv.writer(csvfile, delimiter=';')
                     delay_csv.writerow([actual_date, 0, delay_reed2, 0])
             except Exception as err:
                 print("Cannot open the file")
                 print(str(err))
-        
+
         print("stop reed2 : {}".format(stop_reed2))
         #global start_reed2
         print("start reed2 : {}".format(start_reed2))
         global reed2_cycle_time
         reed2_tmp = stop_reed2 - start_reed2
-        
+
         reed2_cycle_time = reed2_tmp
             #liczenie sredniej dla 30 pomiarow
         global cycle30_reed2
@@ -369,7 +489,7 @@ def reed2_falling_detect(reed2_pin):
             avr30_reed2 = sum30 / 30
             cycle30_reed2 = []
             cycle30_reed2.append(reed2_cycle_time)
-            
+
         #licznie sredniej dla calej zmiany
         actual_hour = stop_reed2.hour
         if actual_hour >= 6 and actual_hour <= 14:
@@ -384,15 +504,15 @@ def reed2_falling_detect(reed2_pin):
             avr_2shift_reed2 = 0
             cycle_3shift_reed2 = []
             avr_3shift_reed2 = 0
-                
+
             cycle_1shift_reed2.append(reed2_cycle_time)
             sum1 = 0
-                
+
             for cycle1 in cycle_1shift_reed2:
                 sum1 = sum1 + cycle1.seconds
-                    
+
             avr_1shift_reed2 = sum1 / len(cycle_1shift_reed2)
-                
+
         elif actual_hour >14 and actual_hour <=22:
             #global cycle_1shift_reed2
             #global avr_1shift_reed2
@@ -405,15 +525,15 @@ def reed2_falling_detect(reed2_pin):
             avr_1shift_reed2= 0
             cycle_3shift_reed2 = []
             avr_3shift_reed2 = 0
-                
+
             cycle_2shift_reed2.append(reed2_cycle_time)
             sum2 = 0
-                
+
             for cycle2 in cycle_2shift_reed2:
                 sum2 = sum2 + cycle2.seconds
-                    
+
             avr_2shift_reed2 = sum2 / len(cycle_2shift_reed2)
-                
+
         elif actual_hour >22 and actual_hour <6:
             #global cycle_1shift_reed2
             #global avr_1shift_reed2
@@ -421,32 +541,33 @@ def reed2_falling_detect(reed2_pin):
             #global avr_2shift_reed2
             #global cycle_3shift_reed2
             #global avr_3shift_reed2
-                
+
             #zerowanie elementow z poprzednich zmian
             cycle_1shift_reed2 = []
             avr_1shift_reed2 = 0
             cycle_2shift_reed2 = []
             avr_2shift_reed2 = 0
-                
+
             cycle_3shift_reed2.append(reed2_cycle_time)
             sum3 = 0
-                
+
             for cycle3 in cycle_3shift_reed2:
                 sum3 = sum3 + cycle3.seconds
-                    
+
             avr_3shift_reed2 = sum3 / len(cycle_3shift_reed2)
-            
+
         #zapis do pliku csv
+        reed2_csv_file = str(config.get('files', 'reed2_file'))
         try:
-            with open('/home/pi/Public/reed2.csv', 'a') as csvfile:
+            with open(reed2_csv_file, 'a') as csvfile:
                 reed2_csv = csv.writer(csvfile, delimiter=';')
-                reed2_csv.writerow([stop_reed2, reed2_cycle_time, avr30_reed2, avr_1shift_reed2, avr_2shift_reed2, avr_1shift_reed2])    
+                reed2_csv.writerow([stop_reed2, reed2_cycle_time, avr30_reed2, avr_1shift_reed2, avr_2shift_reed2, avr_1shift_reed2])
         except Exception as err:
              print("Cannot open the file")
              print(str(err))
-               
+
         start_reed2 = stop_reed2
-    
+
 
 def reed3_falling_detect(reed3_pin):
     print("reed3 sensor falling edge detected!")
@@ -460,7 +581,7 @@ def reed3_falling_detect(reed3_pin):
     else: #dla kazdego kolejnego zbocza
         global stop_reed3
         stop_reed3 = datetime.now()
-        
+
         #liczenie czasu postoju
         global previous_state_reed3
         previous_state_reed3 = not previous_state_reed3
@@ -469,22 +590,23 @@ def reed3_falling_detect(reed3_pin):
             delay_reed3 = delay_reed3_tmp
             print("reed3 delay is {}".format(delay_reed3))
             actual_date = date.today()
+            delay_csv_file = str(config.get('files', 'delay_file'))
             try:
-                with open('/home/pi/Public/delay.csv', 'a') as csvfile:
+                with open(delay_csv_file, 'a') as csvfile:
                     delay_csv = csv.writer(csvfile, delimiter=';')
                     delay_csv.writerow([actual_date, 0, 0, delay_reed3])
             except Exception as err:
                 print("Cannot open the file")
                 print(str(err))
-            
-            
-        
+
+
+
         print("stop reed3 : {}".format(stop_reed3))
         #global start_reed3
         print("start reed3 : {}".format(start_reed3))
         global reed3_cycle_time
         reed3_tmp = stop_reed3 - start_reed3
-        
+
         reed3_cycle_time = reed3_tmp
             #liczenie sredniej dla 30 pomiarow
         global cycle30_reed3
@@ -498,7 +620,7 @@ def reed3_falling_detect(reed3_pin):
             avr30_reed3 = sum30 / 30
             cycle30_reed3 = []
             cycle30_reed3.append(reed3_cycle_time)
-            
+
         #licznie sredniej dla calej zmiany
         actual_hour = stop_reed3.hour
         if actual_hour >= 6 and actual_hour <= 14:
@@ -513,15 +635,15 @@ def reed3_falling_detect(reed3_pin):
             avr_2shift_reed3 = 0
             cycle_3shift_reed3 = []
             avr_3shift_reed3 = 0
-                
+
             cycle_1shift_reed3.append(reed3_cycle_time)
             sum1 = 0
-                
+
             for cycle1 in cycle_1shift_reed3:
                 sum1 = sum1 + cycle1.seconds
-                    
+
             avr_1shift_reed3 = sum1 / len(cycle_1shift_reed3)
-                
+
         elif actual_hour >14 and actual_hour <=22:
             #global cycle_1shift_reed3
             #global avr_1shift_reed3
@@ -534,15 +656,15 @@ def reed3_falling_detect(reed3_pin):
             avr_1shift_reed3= 0
             cycle_3shift_reed3 = []
             avr_3shift_reed3 = 0
-                
+
             cycle_2shift_reed3.append(reed3_cycle_time)
             sum2 = 0
-                
+
             for cycle2 in cycle_2shift_reed3:
                 sum2 = sum2 + cycle2.seconds
-                    
+
             avr_2shift_reed3 = sum2 / len(cycle_2shift_reed3)
-                
+
         elif actual_hour >22 and actual_hour <6:
             #global cycle_1shift_reed3
             #global avr_1shift_reed3
@@ -550,30 +672,31 @@ def reed3_falling_detect(reed3_pin):
             #global avr_2shift_reed3
             #global cycle_3shift_reed3
             #global avr_3shift_reed3
-                
+
             #zerowanie elementow z poprzednich zmian
             cycle_1shift_reed3 = []
             avr_1shift_reed3 = 0
             cycle_2shift_reed3 = []
             avr_2shift_reed3 = 0
-                
+
             cycle_3shift_reed3.append(reed3_cycle_time)
             sum3 = 0
-                
+
             for cycle3 in cycle_3shift_reed3:
                 sum3 = sum3 + cycle3.seconds
-                    
+
             avr_3shift_reed3 = sum3 / len(cycle_3shift_reed3)
-            
+
         #zapis do pliku csv
+        reed3_csv_file = str(config.get('files', 'reed3_file'))
         try:
-            with open('/home/pi/Public/reed3.csv', 'a') as csvfile:
+            with open(reed3_csv_file, 'a') as csvfile:
                 reed3_csv = csv.writer(csvfile, delimiter=';')
-                reed3_csv.writerow([stop_reed3, reed3_cycle_time, avr30_reed3, avr_1shift_reed3, avr_2shift_reed3, avr_1shift_reed3])    
+                reed3_csv.writerow([stop_reed3, reed3_cycle_time, avr30_reed3, avr_1shift_reed3, avr_2shift_reed3, avr_1shift_reed3])
         except Exception as err:
              print("Cannot open the file")
              print(str(err))
-               
+
         start_reed3 = stop_reed3
 
 def set_gpio():
@@ -588,106 +711,92 @@ def main():
     print("Start Script..")
     print("gpio initialization")
     set_gpio()
-    
+
+    optical_csv_file = str(config.get('files', 'optical_file'))
+
     #utworzenie pliku csv do sensora optycznego
-    optical_csv_exist = os.path.exists("/home/pi/Public/optical.csv")
+    optical_csv_exist = os.path.exists(optical_csv_file)
     if optical_csv_exist == False:
         try:
-            with open('/home/pi/Public/optical.csv', 'a') as csvfile:
+            with open(optical_csv_file, 'a') as csvfile:
                 optical_csv = csv.writer(csvfile, delimiter=';')
                 optical_csv.writerow(['date','cycle optical', 'avr30', 'avr 1shift', 'avr 2shift', 'avr 3shift'])
         except Exception as err:
             print("Cannot open the file")
             print(str(err))
-            
+
+    reed1_csv_file = str(config.get('files', 'reed1_file'))
+
     #utworzenie pliku csv do sensora reed1
-    reed1_csv_exist = os.path.exists("/home/pi/Public/reed1.csv")
+    reed1_csv_exist = os.path.exists(reed1_csv_file)
     if reed1_csv_exist == False:
         try:
-            with open('/home/pi/Public/reed1.csv', 'a') as csvfile:
+            with open(reed1_csv_file, 'a') as csvfile:
                 reed1_csv = csv.writer(csvfile, delimiter=';')
                 reed1_csv.writerow(['date','cycle reed1', 'avr30', 'avr 1shift', 'avr 2shift', 'avr 3shift'])
         except Exception as err:
             print("Cannot open the file")
             print(str(err))
-            
+
+    reed2_csv_file = str(config.get('files', 'reed2_file'))
+
     #utworzenie pliku csv do sensora reed2
-    reed2_csv_exist = os.path.exists("/home/pi/Public/reed2.csv")
+    reed2_csv_exist = os.path.exists(reed2_csv_file)
     if reed2_csv_exist == False:
         try:
-            with open('/home/pi/Public/reed2.csv', 'a') as csvfile:
+            with open(reed2_csv_file, 'a') as csvfile:
                 reed2_csv = csv.writer(csvfile, delimiter=';')
                 reed2_csv.writerow(['date','cycle reed2', 'avr30', 'avr 1shift', 'avr 2shift', 'avr 3shift'])
         except Exception as err:
             print("Cannot open the file")
             print(str(err))
-            
+
+    reed3_csv_file = str(config.get('files', 'reed3_file'))
+
     #utworzenie pliku csv do sensora reed3
-    reed3_csv_exist = os.path.exists("/home/pi/Public/reed3.csv")
+    reed3_csv_exist = os.path.exists(reed3_csv_file)
     if reed3_csv_exist == False:
         try:
-            with open('/home/pi/Public/reed3.csv', 'a') as csvfile:
+            with open(reed3_csv_file, 'a') as csvfile:
                 reed3_csv = csv.writer(csvfile, delimiter=';')
                 reed3_csv.writerow(['date','cycle reed3', 'avr30', 'avr 1shift', 'avr 2shift', 'avr 3shift'])
         except Exception as err:
             print("Cannot open the file")
             print(str(err))
-            
-            
+
+
+    delay_csv_file = str(config.get('files', 'delay_file'))
+
     #utworzenie pliku csv do czasu postojow
-    delay_csv_exist = os.path.exists("/home/pi/Public/delay.csv")
+    delay_csv_exist = os.path.exists(delay_csv_file)
     if delay_csv_exist == False:
         try:
-            with open('/home/pi/Public/delay.csv', 'a') as csvfile:
+            with open(delay_csv_file, 'a') as csvfile:
                 delay_csv = csv.writer(csvfile, delimiter=';')
                 delay_csv.writerow(['date','delay reed1', 'delay reed2', 'delay reed3'])
         except:
             print("Cannot open the file")
-    
+
     gpio.add_event_detect(opt_sensor_pin, gpio.RISING, callback=op_sensor_rising_detect, bouncetime=200)
-    
+
     gpio.add_event_detect(reed1_pin, gpio.FALLING, callback=reed1_falling_detect, bouncetime=200)
     gpio.add_event_detect(reed2_pin, gpio.FALLING, callback=reed2_falling_detect, bouncetime=200)
     gpio.add_event_detect(reed3_pin, gpio.FALLING, callback=reed3_falling_detect, bouncetime=200)
-    
-    
+
+
     print("First init time: {}".format(start_time_main))
-    
-    while True:
-  
-        
+
+
+    window()
+
+
+    #while True:
+
+
         #delay
-        
-        input_reed3 = gpio.input(reed3_pin)
-        #print(input_reed3)
-        global high_start_reed3
-        global previous_state_reed3
-        if input_reed3 == 1 and previous_state_reed3 == 0: 
-            high_start_reed3 = datetime.now()
-            previous_state_reed3 = not previous_state_reed3
-            print("reed3 delay start counting")
-            
-            
-        input_reed2 = gpio.input(reed2_pin)
-        #print(input_reed2)
-        global high_start_reed2
-        global previous_state_reed2
-        if input_reed2 == 1 and previous_state_reed2 == 0: 
-            high_start_reed2 = datetime.now()
-            previous_state_reed2 = not previous_state_reed2
-            print("reed2 delay start counting")
-            
-            
-        input_reed1 = gpio.input(reed1_pin)
-        print(input_reed1)
-        global high_start_reed1
-        global previous_state_reed1
-        if input_reed1 == 1 and previous_state_reed1 == 0: 
-            high_start_reed1 = datetime.now()
-            previous_state_reed1 = not previous_state_reed1
-            print("reed1 delay start counting")
-        
-        time.sleep(1) #do debugu
+        #delay_func()
+
+
 
 
 if __name__=="__main__":
