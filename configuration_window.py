@@ -42,6 +42,9 @@ class MyWindow1(QtWidgets.QWidget):
         reed3_file_write = self.text9.text()
         print('reed3 file set to : {}'.format(reed3_file_write))
 
+        delay_file_write = self.text10.text()
+        print('delay file set to : {}'.format(delay_file_write))
+
         self.close()
 
         config = ConfigParser()
@@ -57,6 +60,10 @@ class MyWindow1(QtWidgets.QWidget):
 
         config.add_section('files')
         config.set('files', 'optical_file', optical_file_write)
+        config.set('files', 'reed1_file', reed1_file_write)
+        config.set('files', 'reed2_file', reed2_file_write)
+        config.set('files', 'reed3_file', reed3_file_write)
+        config.set('files', 'delay_file', delay_file_write)
 
         #TODO: dokonczyc zapis do ini
 
@@ -166,12 +173,22 @@ class MyWindow1(QtWidgets.QWidget):
         self.text9.setText(reed3_file)
         grid.addWidget(self.text9,9, 1)
 
+        #file5
+        label10 = QtWidgets.QLabel(self)
+        label10.setText('delay Output File')
+        grid.addWidget(label10,10,0)
+
+        self.text10 = QtWidgets.QLineEdit(self)
+        delay_file = str(config.get('files', 'delay_file'))
+        self.text10.setText(delay_file)
+        grid.addWidget(self.text10, 10,1)
+
         btn1 = QtWidgets.QPushButton(self)
         btn1.setText("Save and Reboot")
         btn1.clicked.connect(self.save_clicked)
-        grid.addWidget(btn1, 10, 0)
+        grid.addWidget(btn1, 11, 0)
 
         btn2 = QtWidgets.QPushButton(self)
         btn2.setText("Cancel")
         btn2.clicked.connect(self.cancel_clicked)
-        grid.addWidget(btn2, 10, 1)
+        grid.addWidget(btn2, 11, 1)
