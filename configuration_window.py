@@ -65,7 +65,6 @@ class MyWindow1(QtWidgets.QWidget):
         config.set('files', 'reed3_file', reed3_file_write)
         config.set('files', 'delay_file', delay_file_write)
 
-        #TODO: dokonczyc zapis do ini
 
         with open('config.ini', 'w') as configfile:
             config.write(configfile)

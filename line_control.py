@@ -5,11 +5,12 @@ import csv
 import os
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QTimer, QRect
-from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, qApp, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, qApp, QMessageBox, QGridLayout
 import sys
 import threading
 from configparser import ConfigParser
 from configuration_window import MyWindow1
+import matplotlib.pyplot as plt
 
 config = ConfigParser()
 
@@ -138,12 +139,16 @@ class MyWindow(QMainWindow):
         self.conf_window.show()
 
     def initUI(self):
+        self.data_display = Data_display(parent=self)
+        self.setCentralWidget(self.data_display)
+
         exitAct = QAction('Exit', self)
         exitAct.setStatusTip("Exit Application")
         exitAct.triggered.connect(qApp.quit)
 
         exportPlot = QAction('Export Plot', self)
         exportPlot.setStatusTip('Export different plots')
+        exportPlot.triggered.connect(self.export_plot)
 
         configure = QAction('Configure', self)
         configure.setStatusTip('Open configuration window')
@@ -183,6 +188,12 @@ class MyWindow(QMainWindow):
 
         x = msg.exec_()
 
+    def export_plot(self):
+        x = [0,1,2,3,4,5,6,7,8,9]
+        y = [0,2,4,6,8,10,12,14,16,18]
+        plt.plot(x, y )
+        plt.savefig('plot.png')
+
 def window():
     app = QApplication([])
     win = MyWindow()
@@ -194,8 +205,18 @@ def window():
     win.show()
     sys.exit(app.exec_())
 
+class Data_display(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        grid = QGridLayout()
+
+        label_section1 = QtWidgets.QLabel(self)
+        label_section1.setText('Optic Sensor')
+        grid.addWidget(label_section1, 0, 0)
+        #TODO: dodac pokazywanie wykresu i kolejnych wartosci z cyklu
 
 
+        #self.label.setPixmap(QtGui.QPixmap("../images/Nikon-1-V3-sample-photo.jpg"))
 
 def op_sensor_rising_detect(opt_sensor_pin):
     print("Opt Sensor rising edge detected!")
